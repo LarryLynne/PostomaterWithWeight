@@ -12,6 +12,26 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <style>
+        .map-floating-logo {
+            position: absolute; /* Вырываем из потока */
+            bottom: 25px;       /* Отступ снизу */
+            right: 25px;        /* Отступ справа */
+            
+            width: 80px;       /* Размер логотипа (поправьте под себя) */
+            height: auto;       /* Сохраняем пропорции */
+            
+            z-index: 5000;      /* Очень высокий индекс, чтобы быть выше карты */
+            
+            opacity: 0.7;       /* Полупрозрачность (50%), чтобы не отвлекать */
+            
+            /* САМОЕ ВАЖНОЕ: */
+            pointer-events: none; /* Логотип пропускает клики сквозь себя на карту */
+            
+            transition: opacity 0.3s ease; /* Плавная анимация при наведении (опционально) */
+        }
+        .map-floating-logo:hover {
+            opacity: 1; 
+        }
         :root {
             --bg-body: #0f172a;       
             --bg-sidebar: #1e293b;    
@@ -193,7 +213,7 @@
 </div>
 
 <div id="map"></div>
-
+<img src="logo3.png" alt="Logo" class="map-floating-logo">
 <script>
     let map;
     let hubsData = [];
