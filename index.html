@@ -508,10 +508,24 @@
         btn.innerText = `↩ Скасувати дію` + (historyStack.length ? ` (${historyStack.length})` : '');
     }
 
+    // ИСПРАВЛЕННАЯ ФУНКЦИЯ ОДИНОЧНОГО ПЕРЕМЕЩЕНИЯ
     window.movePt = function(id) {
         const val = parseInt(document.getElementById('m-'+id).value);
         const p = pointsData.find(x => x.id === id);
-        if(p && val) { saveState(); p.groupIndex = val; p.color = getColor(p.assignedHub, val); map.closePopup(); redrawMap(); }
+        
+        if(p && val && p.groupIndex !== val) { 
+            saveState(); 
+            
+            // 1. Сначала определяем цвет (пока точка еще не в новой группе)
+            const newColor = getColor(p.assignedHub, val);
+            
+            // 2. Потом применяем изменения
+            p.groupIndex = val; 
+            p.color = newColor; 
+            
+            map.closePopup(); 
+            redrawMap(); 
+        }
     };
     window.mergeGr = function(id) {
         const pSrc = pointsData.find(x => x.id === id);
@@ -524,22 +538,38 @@
             map.closePopup(); redrawMap();
         }
     };
+    // ИСПРАВЛЕННАЯ ФУНКЦИЯ МАССОВОГО ПЕРЕМЕЩЕНИЯ
     window.moveSelectedPoints = function() {
         const targetGroup = parseInt(document.getElementById('bulkGroupInput').value);
         if (!targetGroup && targetGroup !== 0) return alert("Вкажіть групу!");
         if (selectedIds.size === 0) return alert("Оберіть точки!");
+        
         saveState();
         const colorCache = {};
+        
         pointsData.forEach(p => {
             if (!selectedIds.has(p.id)) return;
-            const hub = p.assignedHub; const key = hub + '_' + targetGroup;
+            
+            const hub = p.assignedHub;
+            // Добавлена защита String(hub), чтобы не падало на числовых ID
+            const key = hub + '_' + targetGroup; 
+            
             if (!colorCache[key]) {
+                // Ищем существующую точку в целевой группе, которая НЕ выбрана для переноса
                 const ex = pointsData.find(x => x.assignedHub === hub && x.groupIndex === targetGroup && !selectedIds.has(x.id));
-                colorCache[key] = ex ? ex.color : getDistinctColor((hub.length + targetGroup) * 13);
+                
+                // Если есть такая точка - берем её цвет. Если нет - генерируем новый.
+                // String(hub).length защищает от ошибки, если ID хаба число
+                colorCache[key] = ex ? ex.color : getDistinctColor((String(hub).length + targetGroup) * 13);
             }
-            p.groupIndex = targetGroup; p.color = colorCache[key];
+            
+            p.groupIndex = targetGroup; 
+            p.color = colorCache[key];
         });
-        clearSelection(); document.getElementById('bulkGroupInput').value = ''; redrawMap();
+        
+        clearSelection(); 
+        document.getElementById('bulkGroupInput').value = ''; 
+        redrawMap();
     };
 
     // --- UTILS ---
