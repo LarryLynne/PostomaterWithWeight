@@ -428,6 +428,8 @@
         pointsData.forEach(p => {
             const isSelected = selectedIds.has(p.id);
             const extraClass = isSelected ? 'selected-marker' : '';
+            const hexColor = getCurrentHexColor(p.color); // Отримуємо HEX для input
+
             const icon = L.divIcon({
                 className: '', 
                 html: `<div class="pt-marker ${extraClass}" id="marker-${p.id}" style='background:${p.color}; width:10px; height:10px; border-radius:50%; border:1px solid #1e293b; transition:all 0.1s;'></div>`,
@@ -443,14 +445,25 @@
                         Вага: ${p.load}<br>
                         Група: <span style='font-size:1.2em; font-weight:bold'>${p.groupIndex}</span>
                         <hr style="border-color:#334155; margin:8px 0;">
+                        
+                        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:2px;">Переміщення:</div>
                         <div class="popup-row">
                             <input type="number" id="m-${p.id}" value="${p.groupIndex}" style="width:60px">
                             <button class="small-btn" onclick="movePt('${p.id}')">OK</button>
                         </div>
-                        <div class="popup-row" style="margin-top:8px">
+
+                        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:2px; margin-top:8px;">Об'єднання груп:</div>
+                        <div class="popup-row">
                             <input type="number" id="mg-${p.id}" placeholder="№" style="width:60px">
                             <button class="small-btn" onclick="mergeGr('${p.id}')">Поєднати</button>
-                        </div>`;
+                        </div>
+                        
+                        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:2px; margin-top:8px;">Колір групи:</div>
+                        <div class="popup-row">
+                            <input type="color" id="clr-${p.id}" value="${hexColor}" style="width:40px; height:24px; cursor:pointer; border:none; padding:0;">
+                            <button class="small-btn" onclick="changeGroupColor('${p.id}')" style="flex-grow:1;">Змінити колір</button>
+                        </div>
+                        `;
                     L.popup().setLatLng(e.latlng).setContent(popupContent).openOn(map);
                 }
             });
@@ -527,6 +540,29 @@
             redrawMap(); 
         }
     };
+
+    window.changeGroupColor = function(id) {
+        const p = pointsData.find(x => x.id === id);
+        const newColor = document.getElementById('clr-' + id).value;
+        
+        if(p && newColor) { 
+            saveState(); // Зберігаємо для Undo
+            
+            const targetHub = p.assignedHub;
+            const targetGroup = p.groupIndex;
+
+            // Проходимо по всіх точках і шукаємо ті, що в цій же групі цього хабу
+            pointsData.forEach(pt => {
+                if (pt.assignedHub === targetHub && pt.groupIndex === targetGroup) {
+                    pt.color = newColor; 
+                }
+            });
+            
+            map.closePopup(); 
+            redrawMap(); 
+        }
+    };
+
     window.mergeGr = function(id) {
         const pSrc = pointsData.find(x => x.id === id);
         const tIdx = parseInt(document.getElementById('mg-'+id).value);
@@ -627,6 +663,29 @@
             this.value = (parseInt(this.value) || 0) + (e.deltaY < 0 ? step : -step);
         }, { passive: false });
     });
+
+    function hslToHex(h, s, l) {
+        l /= 100;
+        const a = s * Math.min(l, 1 - l) / 100;
+        const f = n => {
+            const k = (n + h / 30) % 12;
+            const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+            return Math.round(255 * color).toString(16).padStart(2, '0');
+        };
+        return `#${f(0)}${f(8)}${f(4)}`;
+    }
+
+    function getCurrentHexColor(colorStr) {
+        // Якщо це вже HEX
+        if (colorStr.startsWith('#')) return colorStr;
+        // Якщо це HSL з коду
+        const match = colorStr.match(/hsl\((\d+(\.\d+)?),\s*(\d+)%,\s*(\d+)%\)/);
+        if (match) {
+            return hslToHex(parseFloat(match[1]), parseInt(match[3]), parseInt(match[4]));
+        }
+        return "#ffffff"; // Fallback
+    }
+
 </script>
 </body>
 </html>
