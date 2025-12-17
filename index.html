@@ -11,6 +11,9 @@
     <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+
     <style>
         .map-floating-logo {
             position: absolute; /* Вырываем из потока */
@@ -146,8 +149,52 @@
             width: 100%; padding: 10px; background: var(--bg-body); border: 1px solid var(--border);
             color: var(--text-main); border-radius: 4px; cursor: pointer; margin-bottom: 5px;
         }
+
+
+
+        /* Контекстное меню */
+        .context-menu {
+            display: none;
+            position: absolute;
+            z-index: 10000;
+            background: #1e293b;
+            border: 1px solid #475569;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border-radius: 6px;
+            padding: 5px 0;
+            min-width: 160px;
+            overflow: hidden;
+        }
+        .context-menu-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            color: #f1f5f9;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+        .context-menu-item:hover {
+            background: #334155;
+            color: #facc15;
+        }
+        .context-menu-item span {
+            font-size: 1.1em;
+        }
+
+        .locked-marker {
+            border-radius: 0 !important; /* Квадратные */
+            border: 2px solid #fff !important;
+            z-index: 2000 !important;
+        }
     </style>
 </head>
+<div id="ctxMenu" class="context-menu">
+    <div class="context-menu-item" onclick="splitZoneAction()">
+        <span>✂</span> Розбити зону...
+    </div>
+</div>
 <body>
 
 <div id="sidebar">
@@ -324,8 +371,10 @@
         const maxLoad = parseInt(document.getElementById('maxLoad').value) || 100000;
         const algo = document.getElementById('algoSelect').value;
 
-        // Reset & Link
+        // Reset & Link (ТОЛЬКО для незаблокированных точек)
         pointsData.forEach(p => {
+            if (p.isLocked) return; // <--- Если точка залочена, пропускаем её сброс
+
             let nearest = null, min = Infinity;
             const pt = turf.point([p.lng, p.lat]);
             hubsData.forEach(h => {
@@ -337,8 +386,12 @@
         });
 
         hubsData.forEach(h => {
-            let hubPoints = pointsData.filter(p => p.assignedHub === h.id);
+            // Берем только те точки, которые НЕ залочены и привязаны к этому хабу
+            // (Залоченные точки уже имеют свою группу и цвет, их не трогаем)
+            let hubPoints = pointsData.filter(p => p.assignedHub === h.id && !p.isLocked);
+            
             if (!hubPoints.length) return;
+            
             if (algo === 'greedy') applyGreedyAlgo(h, hubPoints, maxPts, maxLoad);
             else applyKMeansAlgo(h, hubPoints, maxPts, maxLoad);
         });
@@ -472,12 +525,23 @@
     }
 
     function drawBoundaries() {
-        layers.polygons.clearLayers(); layers.labels.clearLayers();
+        layers.polygons.clearLayers(); 
+        layers.labels.clearLayers();
         const gr = {};
+        
+        // Группируем точки
         pointsData.forEach(p => {
             if(!p.assignedHub) return;
             const k = p.assignedHub + '_' + p.groupIndex;
-            if(!gr[k]) gr[k] = {pts:[], c:p.color, i:p.groupIndex, load:0, count:0};
+            // ВАЖНО: сохраняем hubId для дальнейшего использования
+            if(!gr[k]) gr[k] = {
+                pts:[], 
+                c:p.color, 
+                i:p.groupIndex, 
+                hubId: p.assignedHub, // <--- Добавлено
+                load:0, 
+                count:0
+            };
             gr[k].pts.push([p.lng, p.lat]);
             gr[k].load += p.load;
             gr[k].count += 1;
@@ -486,17 +550,27 @@
         Object.values(gr).forEach(g => {
             if(g.pts.length < 1) return;
             const tp = turf.points(g.pts);
+            
+            // Рисуем полигон
             if(g.pts.length >= 3) {
                 const hull = turf.convex(tp);
                 if(hull) L.geoJSON(hull, {style: {color:g.c, weight:2, fillOpacity:0.3}}).addTo(layers.polygons);
             }
-            let cent = (g.pts.length>=3) ? turf.centerOfMass(turf.convex(tp)) : turf.center(tp);
+            
+            // Вычисляем центр для лейбла
+            let cent = (g.pts.length >= 3 && turf.convex(tp)) ? turf.centerOfMass(turf.convex(tp)) : turf.center(tp);
             const cc = cent.geometry.coordinates;
             
-            // Label with stats on hover/click
             const icon = L.divIcon({ className: 'group-label', html: g.i, iconSize:[20,20], iconAnchor:[10,10] });
             const labelMarker = L.marker([cc[1], cc[0]], {icon}).addTo(layers.labels);
-            labelMarker.bindTooltip(`Група ${g.i}<br>Точок: ${g.count}<br>Вага: ${g.load.toFixed(1)}`);
+            
+            labelMarker.bindTooltip(`Група ${g.i} (Хаб: ${g.hubId})<br>Точок: ${g.count}<br>Вага: ${g.load.toFixed(1)}`);
+
+            // ВАЖНО: Обработка ПРАВОГО КЛИКА
+            labelMarker.on('contextmenu', function(e) {
+                L.DomEvent.stopPropagation(e); // Чтобы карта не двигалась
+                openContextMenu(e, g.hubId, g.i);
+            });
         });
     }
 
@@ -686,6 +760,185 @@
         return "#ffffff"; // Fallback
     }
 
+
+    // --- CONTEXT MENU & SPLIT LOGIC ---
+    let ctxTarget = null; // Хранит цель: {hubId, groupIndex}
+
+    function openContextMenu(e, hubId, groupIndex) {
+        ctxTarget = { hubId, groupIndex };
+        const menu = document.getElementById('ctxMenu');
+        
+        // Позиционируем меню под мышкой
+        menu.style.display = 'block';
+        menu.style.left = e.originalEvent.pageX + 'px';
+        menu.style.top = e.originalEvent.pageY + 'px';
+    }
+
+    // Скрываем меню при клике в любое другое место
+    document.addEventListener('click', function(e) {
+        const menu = document.getElementById('ctxMenu');
+        if (menu.style.display === 'block') {
+            menu.style.display = 'none';
+        }
+    });
+    
+    // Закрываем меню при зуме или драге карты
+    map.on('move', () => { document.getElementById('ctxMenu').style.display = 'none'; });
+
+    function splitZoneAction() {
+        if (!ctxTarget) return;
+        
+        const countStr = prompt(`На скільки частин розбити групу ${ctxTarget.groupIndex}?`, "2");
+        const parts = parseInt(countStr);
+
+        if (!parts || parts < 2) return; // Отмена или некорректный ввод
+
+        saveState(); // Сохраняем для Undo
+
+        // 1. Находим все точки этой группы
+        const targetPoints = pointsData.filter(p => 
+            p.assignedHub === ctxTarget.hubId && p.groupIndex === ctxTarget.groupIndex
+        );
+
+        if (targetPoints.length < parts) {
+            alert("Замало точок для такого розбиття!");
+            return;
+        }
+
+        // 2. Кластеризуем их (K-Means)
+        const fc = turf.featureCollection(targetPoints.map(p => turf.point([p.lng, p.lat], {oid: p.id})));
+        const clustered = turf.clustersKmeans(fc, {numberOfClusters: parts});
+
+        // 3. Определяем новые индексы
+        // Находим максимальный существующий индекс у этого хаба, чтобы не пересечься
+        let maxIndex = 0;
+        pointsData.forEach(p => {
+            if (p.assignedHub === ctxTarget.hubId && p.groupIndex > maxIndex) maxIndex = p.groupIndex;
+        });
+
+        // 4. Применяем изменения
+        // Cluster 0 оставляет за собой старый номер группы (ctxTarget.groupIndex)
+        // Остальные кластеры (1, 2...) получают новые номера (maxIndex + 1, maxIndex + 2...)
+        
+        let newIndexCounter = 1;
+        const colorCache = {}; // Кеш цветов для новых групп
+
+        clustered.features.forEach(f => {
+            const clusterId = f.properties.cluster; // 0, 1, 2...
+            const ptId = f.properties.oid;
+            const pt = pointsData.find(p => p.id === ptId);
+
+            if (pt) {
+                if (clusterId === 0) {
+                    // Оставляем в текущей группе, цвет не меняем (или можно обновить, если хочешь)
+                    pt.groupIndex = ctxTarget.groupIndex;
+                } else {
+                    // Переносим в новую группу
+                    // Логика: если это кластер 1, то новый индекс = maxIndex + 1
+                    const newGrpIdx = maxIndex + newIndexCounter; 
+                    
+                    // Если мы перешли к следующему кластеру в цикле, увеличиваем счетчик групп
+                    // (но тут turf возвращает рандомный порядок, поэтому лучше мапить clusterId -> newGrpIdx)
+                }
+            }
+        });
+
+        // Чуть более надежный способ назначения индексов:
+        const clusterToGroupMap = {};
+        let addedGroups = 0;
+
+        clustered.features.forEach(f => {
+            const cId = f.properties.cluster;
+            if (clusterToGroupMap[cId] === undefined) {
+                if (cId === 0) {
+                    clusterToGroupMap[cId] = ctxTarget.groupIndex; // Одна часть остается старой
+                } else {
+                    addedGroups++;
+                    clusterToGroupMap[cId] = maxIndex + addedGroups; // Остальные новые
+                }
+            }
+            
+            const realId = clusterToGroupMap[cId];
+            const pt = pointsData.find(p => p.id === f.properties.oid);
+            if (pt) {
+                pt.groupIndex = realId;
+                // Генерируем новый цвет для новых групп
+                if (cId !== 0) {
+                     pt.color = getDistinctColor((String(pt.assignedHub).length + realId) * 17);
+                }
+            }
+        });
+
+        redrawMap();
+    }
+
+    // --- DRAWING TOOL (LASSO) ---
+    const drawItems = new L.FeatureGroup();
+    map.addLayer(drawItems);
+
+    const drawControl = new L.Control.Draw({
+        draw: {
+            polyline: false,
+            circle: false,
+            marker: false,
+            circlemarker: false,
+            rectangle: true, // Можно выделять прямоугольником
+            polygon: true    // Можно рисовать сложную форму
+        },
+        edit: {
+            featureGroup: drawItems,
+            edit: false,
+            remove: false
+        }
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+        const layer = e.layer;
+        
+        // Превращаем нарисованную фигуру в GeoJSON для Turf
+        const shape = layer.toGeoJSON();
+        
+        // Спрашиваем номер группы
+        const groupStr = prompt("Введіть номер групи для виділеної зони:", "99");
+        const newGroupIndex = parseInt(groupStr);
+
+        if (!newGroupIndex && newGroupIndex !== 0) return; // Отмена
+
+        saveState();
+
+        let count = 0;
+        
+        pointsData.forEach(p => {
+            const pt = turf.point([p.lng, p.lat]);
+            
+            // Проверяем, попала ли точка внутрь фигуры
+            if (turf.booleanPointInPolygon(pt, shape)) {
+                
+                // Если у точки еще нет Хаба (файл только загружен), ищем ближайший
+                if (!p.assignedHub) {
+                    let nearest = null, min = Infinity;
+                    hubsData.forEach(h => {
+                        const d = turf.distance(pt, turf.point([h.lng, h.lat]));
+                        if(d < min) { min = d; nearest = h.id; }
+                    });
+                    p.assignedHub = nearest;
+                }
+
+                p.groupIndex = newGroupIndex;
+                p.isLocked = true; // <--- БЛОКИРУЕМ ТОЧКУ
+                
+                // Генерируем цвет (или берем существующий, если есть в этой группе)
+                // Для простоты генерируем уникальный для комбинации Хаб+Группа
+                p.color = getDistinctColor((String(p.assignedHub).length + newGroupIndex) * 20);
+                
+                count++;
+            }
+        });
+
+        alert(`Згруповано та заблоковано точок: ${count}`);
+        redrawMap();
+    });
 </script>
 </body>
 </html>
