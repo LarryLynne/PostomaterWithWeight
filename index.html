@@ -16,25 +16,12 @@
 
     <style>
         .map-floating-logo {
-            position: absolute; /* Вырываем из потока */
-            bottom: 25px;       /* Отступ снизу */
-            right: 25px;        /* Отступ справа */
-            
-            width: 80px;       /* Размер логотипа (поправьте под себя) */
-            height: auto;       /* Сохраняем пропорции */
-            
-            z-index: 5000;      /* Очень высокий индекс, чтобы быть выше карты */
-            
-            opacity: 0.7;       /* Полупрозрачность (50%), чтобы не отвлекать */
-            
-            /* САМОЕ ВАЖНОЕ: */
-            pointer-events: none; /* Логотип пропускает клики сквозь себя на карту */
-            
-            transition: opacity 0.3s ease; /* Плавная анимация при наведении (опционально) */
+            position: absolute; bottom: 25px; right: 25px;
+            width: 80px; height: auto; z-index: 5000;
+            opacity: 0.7; pointer-events: none; transition: opacity 0.3s ease;
         }
-        .map-floating-logo:hover {
-            opacity: 1; 
-        }
+        .map-floating-logo:hover { opacity: 1; }
+        
         :root {
             --bg-body: #0f172a;       
             --bg-sidebar: #1e293b;    
@@ -54,31 +41,25 @@
         }
         
         #sidebar {
-            width: 340px;
-            flex-shrink: 0; 
-            background: var(--bg-sidebar);
-            padding: 20px; 
+            width: 340px; flex-shrink: 0; 
+            background: var(--bg-sidebar); padding: 20px; 
             border-right: 1px solid #1e293b;
             display: flex; flex-direction: column; gap: 15px; 
             box-shadow: 4px 0 15px rgba(0,0,0,0.3);
-            z-index: 1000;
-            overflow-y: auto; height: 100vh;
-            box-sizing: border-box; 
+            z-index: 1000; overflow-y: auto; height: 100vh; box-sizing: border-box; 
         }
 
         h2 { margin: 0; font-size: 1.1rem; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-main); font-weight: 700; }
-
         .card { background: #1e293b; border: 1px solid var(--border); border-radius: 6px; padding: 15px; }
-
         label { display: block; margin-bottom: 8px; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
 
-        input[type="number"], input[type="file"] {
+        input[type="number"], input[type="file"], input[type="text"] {
             width: 100%; box-sizing: border-box; padding: 10px;
             background: var(--bg-body); border: 1px solid var(--border);
             color: var(--text-main); border-radius: 4px;
             font-family: inherit; outline: none; transition: border-color 0.2s;
         }
-        input[type="number"]:focus { border-color: #64748b; }
+        input[type="number"]:focus, input[type="text"]:focus { border-color: #64748b; }
 
         .file-wrapper {
             position: relative; overflow: hidden;
@@ -105,7 +86,7 @@
         .status { font-size: 0.8rem; color: var(--text-muted); margin-top: 10px; }
         .status-ok { color: #4ade80; }
 
-        #map { flex-grow: 1; height: 100%; background: #0f172a; }
+        #map { flex-grow: 1; height: 100%; background: #0f172a; position: relative; }
 
         .leaflet-popup-content-wrapper, .leaflet-popup-tip {
             background: var(--bg-sidebar); color: var(--text-main);
@@ -134,10 +115,52 @@
         .setting-row { display: flex; gap: 10px; margin-bottom: 5px; }
         .setting-col { flex: 1; }
 
+        /* Контекстное меню */
+        .context-menu {
+            display: none; position: absolute; z-index: 10000;
+            background: #1e293b; border: 1px solid #475569;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); border-radius: 6px;
+            padding: 5px 0; min-width: 160px; overflow: hidden;
+        }
+        .context-menu-item {
+            padding: 10px 15px; cursor: pointer; color: #f1f5f9;
+            font-size: 0.85rem; display: flex; align-items: center;
+            gap: 8px; transition: background 0.2s;
+        }
+        .context-menu-item:hover { background: #334155; color: #facc15; }
+        .context-menu-item span { font-size: 1.1em; }
+
+        .locked-marker {
+            border-radius: 0 !important; border: 2px solid #fff !important; z-index: 2000 !important;
+        }
+
+        /* NEW: SEARCH PANEL */
+        .search-panel {
+            position: absolute;
+            top: 20px;
+            right: 60px; /* Отступ справа, чтобы не перекрывать Zoom кнопки (обычно они 10-50px) */
+            z-index: 3000;
+            background: var(--bg-sidebar);
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            opacity: 0.8;
+        }
+        .search-panel input {
+            padding: 6px 10px;
+            font-size: 0.85rem;
+            width: 140px;
+            background: #0f172a;
+        }
+
         @media (max-width: 800px) {
             body { flex-direction: column; }
             #sidebar { width: 100%; height: 40vh; border-right: none; border-bottom: 1px solid #1e293b; }
             #map { width: 100%; height: 60vh; }
+            .search-panel { top: auto; bottom: 20px; right: 20px; flex-direction: column; width: 120px; }
         }
 
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -150,51 +173,34 @@
             color: var(--text-main); border-radius: 4px; cursor: pointer; margin-bottom: 5px;
         }
 
-
-
-        /* Контекстное меню */
-        .context-menu {
-            display: none;
-            position: absolute;
-            z-index: 10000;
-            background: #1e293b;
-            border: 1px solid #475569;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        /* Стиль для тимчасової підказки при пошуку */
+        .flash-tooltip {
+            background-color: #facc15;
+            border: 2px solid #fff;
+            color: #0f172a;
+            font-weight: 800;
+            font-size: 1.1rem;
             border-radius: 6px;
-            padding: 5px 0;
-            min-width: 160px;
-            overflow: hidden;
+            box-shadow: 0 0 15px rgba(250, 204, 21, 0.6);
+            opacity: 1 !important;
         }
-        .context-menu-item {
-            padding: 10px 15px;
-            cursor: pointer;
-            color: #f1f5f9;
-            font-size: 0.85rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.2s;
-        }
-        .context-menu-item:hover {
-            background: #334155;
-            color: #facc15;
-        }
-        .context-menu-item span {
-            font-size: 1.1em;
+        /* Прибираємо стандартну стрілочку Leaflet, щоб виглядало як "табличка" */
+        .leaflet-tooltip-top:before, 
+        .leaflet-tooltip-bottom:before, 
+        .leaflet-tooltip-left:before, 
+        .leaflet-tooltip-right:before {
+            display: none !important;
         }
 
-        .locked-marker {
-            border-radius: 0 !important; /* Квадратные */
-            border: 2px solid #fff !important;
-            z-index: 2000 !important;
-        }
     </style>
 </head>
+
 <div id="ctxMenu" class="context-menu">
     <div class="context-menu-item" onclick="splitZoneAction()">
         <span>✂</span> Розбити зону...
     </div>
 </div>
+
 <body>
 
 <div id="sidebar">
@@ -259,12 +265,18 @@
     
 </div>
 
+<div id="searchPanel" class="search-panel">
+    <input type="text" id="searchPointInp" placeholder="Пошук точки">
+    <input type="number" id="searchZoneInp" placeholder="Пошук зони">
+</div>
+
 <div id="map"></div>
 <img src="logo3.png" alt="Logo" class="map-floating-logo">
 <script>
     let map;
     let hubsData = [];
     let pointsData = [];
+    let markersMap = {}; // NEW: Для швидкого пошуку маркерів за ID
     let layers = {
         hubs: L.layerGroup(),
         points: L.layerGroup(),
@@ -284,8 +296,80 @@
         layers.hubs.addTo(map);
         layers.points.addTo(map);
         layers.labels.addTo(map);
+        
+        initSearch(); // NEW: Запуск слухачів пошуку
     }
     initMap();
+
+    // --- SEARCH LOGIC (NEW) ---
+    // --- SEARCH LOGIC (ОНОВЛЕНО) ---
+    function initSearch() {
+        const pInp = document.getElementById('searchPointInp');
+        const zInp = document.getElementById('searchZoneInp');
+
+        // Пошук точки
+        pInp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const val = this.value.trim().toLowerCase();
+                if (!val) return;
+
+                // Шукаємо по точному співпадінню або входженню
+                const found = pointsData.find(p => String(p.id).toLowerCase().includes(val));
+                
+                if (found) {
+                    // 1. Летимо до точки
+                    map.flyTo([found.lat, found.lng], 18, { duration: 1.5 });
+                    
+                    const m = markersMap[found.id];
+                    if (m) {
+                        // 2. Створюємо і відкриваємо яскравий тултіп
+                        m.bindTooltip(String(found.id), {
+                            permanent: true,      // Завжди показувати (поки не видалимо)
+                            direction: 'top',     // Зверху над маркером
+                            className: 'flash-tooltip', // Наш новий стиль
+                            offset: [0, -15],     // Трішки вище маркера
+                            opacity: 1
+                        }).openTooltip();
+
+                        // 3. Через 3 секунди видаляємо тултіп
+                        setTimeout(() => {
+                            m.closeTooltip();
+                            m.unbindTooltip();
+                        }, 3000);
+                    }
+                    
+                    this.value = ''; 
+                    this.blur(); 
+                } else {
+                    alert('Точку не знайдено!');
+                }
+            }
+        });
+
+        // Пошук зони (без змін, але залишаю для цілісності коду)
+        zInp.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                const val = parseInt(this.value);
+                if (!val && val !== 0) return;
+
+                const groupPoints = pointsData.filter(p => p.groupIndex === val);
+                
+                if (groupPoints.length > 0) {
+                    const lats = groupPoints.map(p => p.lat);
+                    const lngs = groupPoints.map(p => p.lng);
+                    const bounds = L.latLngBounds(
+                        [Math.min(...lats), Math.min(...lngs)],
+                        [Math.max(...lats), Math.max(...lngs)]
+                    );
+                    map.fitBounds(bounds, {padding: [50, 50], maxZoom: 18});
+                    this.value = '';
+                    this.blur();
+                } else {
+                    alert(`Зону №${val} не знайдено!`);
+                }
+            }
+        });
+    }
 
     // --- FILE PROCESSING ---
     document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -323,7 +407,7 @@
             id: p.id, lat: p.lat, lng: p.lng,
             assignedHub: p.assignedHub, groupIndex: p.groupIndex, 
             color: p.color,
-            load: p.load || 0 // Restore load
+            load: p.load || 0
         }));
         historyStack = []; updateUndoUI();
         drawHubs(); drawPoints(); drawBoundaries();
@@ -339,10 +423,8 @@
                 lat: parseFloat(h['Широта']), lng: parseFloat(h['Довгота'])
             }));
 
-            // Detect Load Column
             if (pRaw.length > 0) {
                 const keys = Object.keys(pRaw[0]);
-                // regex look for: вага, weight, kg, кг, volume, объем, load, груз
                 var loadKey = keys.find(k => /вага|weight|кг|kg|об'?єм|vol|груз|load/i.test(k));
                 console.log("Load column detected:", loadKey);
             }
@@ -371,9 +453,8 @@
         const maxLoad = parseInt(document.getElementById('maxLoad').value) || 100000;
         const algo = document.getElementById('algoSelect').value;
 
-        // Reset & Link (ТОЛЬКО для незаблокированных точек)
         pointsData.forEach(p => {
-            if (p.isLocked) return; // <--- Если точка залочена, пропускаем её сброс
+            if (p.isLocked) return; 
 
             let nearest = null, min = Infinity;
             const pt = turf.point([p.lng, p.lat]);
@@ -386,12 +467,8 @@
         });
 
         hubsData.forEach(h => {
-            // Берем только те точки, которые НЕ залочены и привязаны к этому хабу
-            // (Залоченные точки уже имеют свою группу и цвет, их не трогаем)
             let hubPoints = pointsData.filter(p => p.assignedHub === h.id && !p.isLocked);
-            
             if (!hubPoints.length) return;
-            
             if (algo === 'greedy') applyGreedyAlgo(h, hubPoints, maxPts, maxLoad);
             else applyKMeansAlgo(h, hubPoints, maxPts, maxLoad);
         });
@@ -399,12 +476,9 @@
     }
 
     function applyKMeansAlgo(hub, pts, maxPts, maxLoad) {
-        // Calculate needed clusters based on BOTH constraints
         const totalLoad = pts.reduce((sum, p) => sum + p.load, 0);
         const kLoad = Math.ceil(totalLoad / maxLoad);
         const kCount = Math.ceil(pts.length / maxPts);
-        
-        // Take the larger requirement
         const k = Math.max(kLoad, kCount);
 
         if(k <= 1) {
@@ -428,26 +502,22 @@
         const hubPt = turf.point([hub.lng, hub.lat]);
         
         while(pool.length > 0) {
-            // Find farthest
             let farthestPt = pool[0]; let maxDist = -1;
             pool.forEach(p => {
                 const d = turf.distance(hubPt, turf.point([p.lng, p.lat]));
                 if(d > maxDist) { maxDist = d; farthestPt = p; }
             });
             
-            // Sort by distance to farthest
             const anchorGeo = turf.point([farthestPt.lng, farthestPt.lat]);
             const withDist = pool.map(p => ({ p: p, d: turf.distance(anchorGeo, turf.point([p.lng, p.lat])) }));
             withDist.sort((a, b) => a.d - b.d);
             
-            // Fill Chunk honoring BOTH limits
             let currentChunk = [];
             let currentCount = 0;
             let currentLoad = 0;
             
             for (let i = 0; i < withDist.length; i++) {
                 const cand = withDist[i].p;
-                // Check limits. Always add at least one point even if it exceeds limit (to avoid infinite loop)
                 if (currentCount === 0 || 
                    (currentCount + 1 <= maxPts && currentLoad + cand.load <= maxLoad)) {
                     currentChunk.push(cand);
@@ -478,10 +548,11 @@
 
     function drawPoints() {
         layers.points.clearLayers();
+        markersMap = {}; // Очищуємо карту маркерів
         pointsData.forEach(p => {
             const isSelected = selectedIds.has(p.id);
             const extraClass = isSelected ? 'selected-marker' : '';
-            const hexColor = getCurrentHexColor(p.color); // Отримуємо HEX для input
+            const hexColor = getCurrentHexColor(p.color); 
 
             const icon = L.divIcon({
                 className: '', 
@@ -489,6 +560,10 @@
                 iconSize: [12,12]
             });
             const m = L.marker([p.lat, p.lng], {icon});
+            
+            // ЗБЕРІГАЄМО ПОСИЛАННЯ НА МАРКЕР
+            markersMap[p.id] = m; 
+
             m.on('click', function(e) {
                 if (selectionMode) togglePointSelection(p.id);
                 else {
@@ -529,16 +604,14 @@
         layers.labels.clearLayers();
         const gr = {};
         
-        // Группируем точки
         pointsData.forEach(p => {
             if(!p.assignedHub) return;
             const k = p.assignedHub + '_' + p.groupIndex;
-            // ВАЖНО: сохраняем hubId для дальнейшего использования
             if(!gr[k]) gr[k] = {
                 pts:[], 
                 c:p.color, 
                 i:p.groupIndex, 
-                hubId: p.assignedHub, // <--- Добавлено
+                hubId: p.assignedHub, 
                 load:0, 
                 count:0
             };
@@ -551,13 +624,11 @@
             if(g.pts.length < 1) return;
             const tp = turf.points(g.pts);
             
-            // Рисуем полигон
             if(g.pts.length >= 3) {
                 const hull = turf.convex(tp);
                 if(hull) L.geoJSON(hull, {style: {color:g.c, weight:2, fillOpacity:0.3}}).addTo(layers.polygons);
             }
             
-            // Вычисляем центр для лейбла
             let cent = (g.pts.length >= 3 && turf.convex(tp)) ? turf.centerOfMass(turf.convex(tp)) : turf.center(tp);
             const cc = cent.geometry.coordinates;
             
@@ -566,9 +637,8 @@
             
             labelMarker.bindTooltip(`Група ${g.i} (Хаб: ${g.hubId})<br>Точок: ${g.count}<br>Вага: ${g.load.toFixed(1)}`);
 
-            // ВАЖНО: Обработка ПРАВОГО КЛИКА
             labelMarker.on('contextmenu', function(e) {
-                L.DomEvent.stopPropagation(e); // Чтобы карта не двигалась
+                L.DomEvent.stopPropagation(e); 
                 openContextMenu(e, g.hubId, g.i);
             });
         });
@@ -595,21 +665,15 @@
         btn.innerText = `↩ Скасувати дію` + (historyStack.length ? ` (${historyStack.length})` : '');
     }
 
-    // ИСПРАВЛЕННАЯ ФУНКЦИЯ ОДИНОЧНОГО ПЕРЕМЕЩЕНИЯ
     window.movePt = function(id) {
         const val = parseInt(document.getElementById('m-'+id).value);
         const p = pointsData.find(x => x.id === id);
         
         if(p && val && p.groupIndex !== val) { 
             saveState(); 
-            
-            // 1. Сначала определяем цвет (пока точка еще не в новой группе)
             const newColor = getColor(p.assignedHub, val);
-            
-            // 2. Потом применяем изменения
             p.groupIndex = val; 
             p.color = newColor; 
-            
             map.closePopup(); 
             redrawMap(); 
         }
@@ -618,20 +682,15 @@
     window.changeGroupColor = function(id) {
         const p = pointsData.find(x => x.id === id);
         const newColor = document.getElementById('clr-' + id).value;
-        
         if(p && newColor) { 
-            saveState(); // Зберігаємо для Undo
-            
+            saveState(); 
             const targetHub = p.assignedHub;
             const targetGroup = p.groupIndex;
-
-            // Проходимо по всіх точках і шукаємо ті, що в цій же групі цього хабу
             pointsData.forEach(pt => {
                 if (pt.assignedHub === targetHub && pt.groupIndex === targetGroup) {
                     pt.color = newColor; 
                 }
             });
-            
             map.closePopup(); 
             redrawMap(); 
         }
@@ -648,7 +707,7 @@
             map.closePopup(); redrawMap();
         }
     };
-    // ИСПРАВЛЕННАЯ ФУНКЦИЯ МАССОВОГО ПЕРЕМЕЩЕНИЯ
+
     window.moveSelectedPoints = function() {
         const targetGroup = parseInt(document.getElementById('bulkGroupInput').value);
         if (!targetGroup && targetGroup !== 0) return alert("Вкажіть групу!");
@@ -659,20 +718,12 @@
         
         pointsData.forEach(p => {
             if (!selectedIds.has(p.id)) return;
-            
             const hub = p.assignedHub;
-            // Добавлена защита String(hub), чтобы не падало на числовых ID
             const key = hub + '_' + targetGroup; 
-            
             if (!colorCache[key]) {
-                // Ищем существующую точку в целевой группе, которая НЕ выбрана для переноса
                 const ex = pointsData.find(x => x.assignedHub === hub && x.groupIndex === targetGroup && !selectedIds.has(x.id));
-                
-                // Если есть такая точка - берем её цвет. Если нет - генерируем новый.
-                // String(hub).length защищает от ошибки, если ID хаба число
                 colorCache[key] = ex ? ex.color : getDistinctColor((String(hub).length + targetGroup) * 13);
             }
-            
             p.groupIndex = targetGroup; 
             p.color = colorCache[key];
         });
@@ -750,31 +801,25 @@
     }
 
     function getCurrentHexColor(colorStr) {
-        // Якщо це вже HEX
         if (colorStr.startsWith('#')) return colorStr;
-        // Якщо це HSL з коду
         const match = colorStr.match(/hsl\((\d+(\.\d+)?),\s*(\d+)%,\s*(\d+)%\)/);
         if (match) {
             return hslToHex(parseFloat(match[1]), parseInt(match[3]), parseInt(match[4]));
         }
-        return "#ffffff"; // Fallback
+        return "#ffffff";
     }
 
-
     // --- CONTEXT MENU & SPLIT LOGIC ---
-    let ctxTarget = null; // Хранит цель: {hubId, groupIndex}
+    let ctxTarget = null; 
 
     function openContextMenu(e, hubId, groupIndex) {
         ctxTarget = { hubId, groupIndex };
         const menu = document.getElementById('ctxMenu');
-        
-        // Позиционируем меню под мышкой
         menu.style.display = 'block';
         menu.style.left = e.originalEvent.pageX + 'px';
         menu.style.top = e.originalEvent.pageY + 'px';
     }
 
-    // Скрываем меню при клике в любое другое место
     document.addEventListener('click', function(e) {
         const menu = document.getElementById('ctxMenu');
         if (menu.style.display === 'block') {
@@ -782,7 +827,6 @@
         }
     });
     
-    // Закрываем меню при зуме или драге карты
     map.on('move', () => { document.getElementById('ctxMenu').style.display = 'none'; });
 
     function splitZoneAction() {
@@ -791,11 +835,10 @@
         const countStr = prompt(`На скільки частин розбити групу ${ctxTarget.groupIndex}?`, "2");
         const parts = parseInt(countStr);
 
-        if (!parts || parts < 2) return; // Отмена или некорректный ввод
+        if (!parts || parts < 2) return; 
 
-        saveState(); // Сохраняем для Undo
+        saveState(); 
 
-        // 1. Находим все точки этой группы
         const targetPoints = pointsData.filter(p => 
             p.assignedHub === ctxTarget.hubId && p.groupIndex === ctxTarget.groupIndex
         );
@@ -805,45 +848,14 @@
             return;
         }
 
-        // 2. Кластеризуем их (K-Means)
         const fc = turf.featureCollection(targetPoints.map(p => turf.point([p.lng, p.lat], {oid: p.id})));
         const clustered = turf.clustersKmeans(fc, {numberOfClusters: parts});
 
-        // 3. Определяем новые индексы
-        // Находим максимальный существующий индекс у этого хаба, чтобы не пересечься
         let maxIndex = 0;
         pointsData.forEach(p => {
             if (p.assignedHub === ctxTarget.hubId && p.groupIndex > maxIndex) maxIndex = p.groupIndex;
         });
-
-        // 4. Применяем изменения
-        // Cluster 0 оставляет за собой старый номер группы (ctxTarget.groupIndex)
-        // Остальные кластеры (1, 2...) получают новые номера (maxIndex + 1, maxIndex + 2...)
         
-        let newIndexCounter = 1;
-        const colorCache = {}; // Кеш цветов для новых групп
-
-        clustered.features.forEach(f => {
-            const clusterId = f.properties.cluster; // 0, 1, 2...
-            const ptId = f.properties.oid;
-            const pt = pointsData.find(p => p.id === ptId);
-
-            if (pt) {
-                if (clusterId === 0) {
-                    // Оставляем в текущей группе, цвет не меняем (или можно обновить, если хочешь)
-                    pt.groupIndex = ctxTarget.groupIndex;
-                } else {
-                    // Переносим в новую группу
-                    // Логика: если это кластер 1, то новый индекс = maxIndex + 1
-                    const newGrpIdx = maxIndex + newIndexCounter; 
-                    
-                    // Если мы перешли к следующему кластеру в цикле, увеличиваем счетчик групп
-                    // (но тут turf возвращает рандомный порядок, поэтому лучше мапить clusterId -> newGrpIdx)
-                }
-            }
-        });
-
-        // Чуть более надежный способ назначения индексов:
         const clusterToGroupMap = {};
         let addedGroups = 0;
 
@@ -851,10 +863,10 @@
             const cId = f.properties.cluster;
             if (clusterToGroupMap[cId] === undefined) {
                 if (cId === 0) {
-                    clusterToGroupMap[cId] = ctxTarget.groupIndex; // Одна часть остается старой
+                    clusterToGroupMap[cId] = ctxTarget.groupIndex; 
                 } else {
                     addedGroups++;
-                    clusterToGroupMap[cId] = maxIndex + addedGroups; // Остальные новые
+                    clusterToGroupMap[cId] = maxIndex + addedGroups; 
                 }
             }
             
@@ -862,7 +874,6 @@
             const pt = pointsData.find(p => p.id === f.properties.oid);
             if (pt) {
                 pt.groupIndex = realId;
-                // Генерируем новый цвет для новых групп
                 if (cId !== 0) {
                      pt.color = getDistinctColor((String(pt.assignedHub).length + realId) * 17);
                 }
@@ -878,44 +889,25 @@
 
     const drawControl = new L.Control.Draw({
         draw: {
-            polyline: false,
-            circle: false,
-            marker: false,
-            circlemarker: false,
-            rectangle: true, // Можно выделять прямоугольником
-            polygon: true    // Можно рисовать сложную форму
+            polyline: false, circle: false, marker: false, circlemarker: false,
+            rectangle: true, polygon: true
         },
-        edit: {
-            featureGroup: drawItems,
-            edit: false,
-            remove: false
-        }
+        edit: { featureGroup: drawItems, edit: false, remove: false }
     });
     map.addControl(drawControl);
 
     map.on(L.Draw.Event.CREATED, function (e) {
         const layer = e.layer;
-        
-        // Превращаем нарисованную фигуру в GeoJSON для Turf
         const shape = layer.toGeoJSON();
-        
-        // Спрашиваем номер группы
         const groupStr = prompt("Введіть номер групи для виділеної зони:", "99");
         const newGroupIndex = parseInt(groupStr);
-
-        if (!newGroupIndex && newGroupIndex !== 0) return; // Отмена
-
+        if (!newGroupIndex && newGroupIndex !== 0) return; 
         saveState();
 
         let count = 0;
-        
         pointsData.forEach(p => {
             const pt = turf.point([p.lng, p.lat]);
-            
-            // Проверяем, попала ли точка внутрь фигуры
             if (turf.booleanPointInPolygon(pt, shape)) {
-                
-                // Если у точки еще нет Хаба (файл только загружен), ищем ближайший
                 if (!p.assignedHub) {
                     let nearest = null, min = Infinity;
                     hubsData.forEach(h => {
@@ -924,14 +916,9 @@
                     });
                     p.assignedHub = nearest;
                 }
-
                 p.groupIndex = newGroupIndex;
-                p.isLocked = true; // <--- БЛОКИРУЕМ ТОЧКУ
-                
-                // Генерируем цвет (или берем существующий, если есть в этой группе)
-                // Для простоты генерируем уникальный для комбинации Хаб+Группа
+                p.isLocked = true; 
                 p.color = getDistinctColor((String(p.assignedHub).length + newGroupIndex) * 20);
-                
                 count++;
             }
         });
