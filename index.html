@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Поштоматер</title>
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -24,8 +23,7 @@
         
         :root {
             --bg-body: #0f172a;       
-            --bg-sidebar: #1e293b;    
-            --bg-card: #334155;       
+            --bg-sidebar: #1e293b;        
             --bg-hover: #475569;      
             --text-main: #f1f5f9;     
             --text-muted: #94a3b8;
@@ -72,11 +70,13 @@
         #fileName { font-size: 0.85rem; color: var(--text-muted); pointer-events: none;}
 
         button {
+            text-align:center;
             width: 100%; padding: 12px; margin-top: 10px;
-            background-color: var(--bg-card); border: 1px solid var(--border);
+            background-color: var(--bg-sidebar); border: 1px solid var(--border);
             color: var(--text-main); border-radius: 4px; cursor: pointer;
             font-size: 0.9rem; font-weight: 500; transition: all 0.2s;
             text-transform: uppercase; letter-spacing: 0.5px; line-height: 1.2;
+            
         }
         button:hover { background-color: var(--bg-hover); border-color: #64748b; }
         button:active { transform: translateY(1px); }
@@ -192,6 +192,37 @@
             display: none !important;
         }
 
+        /* Модальное окно (замена prompt/alert) */
+        .modal-overlay {
+            display: none; /* Скрыто по умолчанию */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            /*background: rgba(15, 23, 42, 0.8); /* Затемнение фона */
+            z-index: 9999;
+            align-items: center; justify-content: center;
+        }
+        .modal-box {
+            background: var(--bg-sidebar);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px;
+            width: 300px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex; flex-direction: column; gap: 15px;
+            animation: popIn 0.2s ease-out;
+        }
+        @keyframes popIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .modal-title { font-weight: 700; color: var(--text-main); font-size: 1.1rem; }
+        .modal-desc { font-size: 0.9rem; color: var(--text-muted); }
+        .modal-input {
+            width: 100%; padding: 10px; background: var(--bg-body);
+            border: 1px solid var(--border); color: #facc15; font-size: 1.1rem;
+            border-radius: 4px; outline: none; text-align: center;
+        }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 5px; }
+
     </style>
 </head>
 
@@ -272,7 +303,72 @@
 
 <div id="map"></div>
 <img src="logo3.png" alt="Logo" class="map-floating-logo">
+
+<div id="customModal" class="modal-overlay">
+    <div class="modal-box">
+        <div id="modalTitle" class="modal-title">Заголовок</div>
+        <div id="modalDesc" class="modal-desc">Текст описания</div>
+        <input type="text" id="modalInput" class="modal-input" autocomplete="off">
+        <div class="modal-buttons">
+            <button id="modalClose" class="button" onclick="closeModal(null)">Скасувати</button>
+            <button class="button" onclick="confirmModal()">OK</button>
+        </div>
+    </div>
+</div>
+<!-- modal-btn-confirm -->
+
 <script>
+    // --- УПРАВЛЕНИЕ МОДАЛЬНЫМИ ОКНАМИ ---
+    let modalResolve = null; // Сюда сохраним функцию "что делать после ОК"
+    function showPrompt(title, desc, defaultValue = "") {
+        return new Promise((resolve) => {
+            const overlay = document.getElementById('customModal');
+            const inp = document.getElementById('modalInput');
+            
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalDesc').innerText = desc;
+            //document.getElementById('modalClose').style.display = 'flex';
+            //document.getElementById('modalClose').style.textAlign = 'center';
+            
+            // Настраиваем режим "Prompt" (с вводом)
+            inp.style.display = 'block';
+            inp.value = defaultValue;
+            
+            overlay.style.display = 'flex';
+            inp.focus();
+            inp.select();
+            
+            modalResolve = resolve; // Запоминаем промис
+
+            // Enter нажимает OK
+            inp.onkeydown = (e) => { if(e.key === 'Enter') confirmModal(); };
+        });
+    }
+
+    function showAlert(title, desc) {
+        return new Promise((resolve) => {
+            const overlay = document.getElementById('customModal');
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalDesc').innerText = desc;
+            document.getElementById('modalInput').style.display = 'none'; // Скрываем ввод
+            //document.getElementById('modalClose').style.display = displayClose;
+            
+            overlay.style.display = 'flex';
+            modalResolve = resolve;
+        });
+    }
+
+    function closeModal(value) {
+        document.getElementById('customModal').style.display = 'none';
+        if (modalResolve) modalResolve(value); // Возвращаем null если отмена
+        modalResolve = null;
+    }
+
+    function confirmModal() {
+        const inp = document.getElementById('modalInput');
+        const val = inp.style.display === 'none' ? true : inp.value; // Если это alert - вернем true, если prompt - текст
+        closeModal(val);
+    }
     let map;
     let hubsData = [];
     let pointsData = [];
@@ -324,10 +420,10 @@
                     if (m) {
                         // 2. Створюємо і відкриваємо яскравий тултіп
                         m.bindTooltip(String(found.id), {
-                            permanent: true,      // Завжди показувати (поки не видалимо)
-                            direction: 'top',     // Зверху над маркером
-                            className: 'flash-tooltip', // Наш новий стиль
-                            offset: [0, -15],     // Трішки вище маркера
+                            permanent: true,      
+                            direction: 'top',     
+                            className: 'flash-tooltip', 
+                            offset: [0, -15],     
                             opacity: 1
                         }).openTooltip();
 
@@ -341,12 +437,14 @@
                     this.value = ''; 
                     this.blur(); 
                 } else {
-                    alert('Точку не знайдено!');
+                    // БЫЛО: alert('Точку не знайдено!');
+                    // СТАЛО:
+                    showAlert('Пошук', 'Точку не знайдено!');
                 }
             }
         });
 
-        // Пошук зони (без змін, але залишаю для цілісності коду)
+        // Пошук зони
         zInp.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') {
                 const val = parseInt(this.value);
@@ -365,7 +463,9 @@
                     this.value = '';
                     this.blur();
                 } else {
-                    alert(`Зону №${val} не знайдено!`);
+                    // БЫЛО: alert(`Зону №${val} не знайдено!`);
+                    // СТАЛО:
+                    showAlert('Пошук', `Зону №${val} не знайдено!`);
                 }
             }
         });
@@ -832,55 +932,59 @@
     function splitZoneAction() {
         if (!ctxTarget) return;
         
-        const countStr = prompt(`На скільки частин розбити групу ${ctxTarget.groupIndex}?`, "2");
-        const parts = parseInt(countStr);
-
-        if (!parts || parts < 2) return; 
-
-        saveState(); 
-
-        const targetPoints = pointsData.filter(p => 
-            p.assignedHub === ctxTarget.hubId && p.groupIndex === ctxTarget.groupIndex
-        );
-
-        if (targetPoints.length < parts) {
-            alert("Замало точок для такого розбиття!");
-            return;
-        }
-
-        const fc = turf.featureCollection(targetPoints.map(p => turf.point([p.lng, p.lat], {oid: p.id})));
-        const clustered = turf.clustersKmeans(fc, {numberOfClusters: parts});
-
-        let maxIndex = 0;
-        pointsData.forEach(p => {
-            if (p.assignedHub === ctxTarget.hubId && p.groupIndex > maxIndex) maxIndex = p.groupIndex;
-        });
-        
-        const clusterToGroupMap = {};
-        let addedGroups = 0;
-
-        clustered.features.forEach(f => {
-            const cId = f.properties.cluster;
-            if (clusterToGroupMap[cId] === undefined) {
-                if (cId === 0) {
-                    clusterToGroupMap[cId] = ctxTarget.groupIndex; 
-                } else {
-                    addedGroups++;
-                    clusterToGroupMap[cId] = maxIndex + addedGroups; 
-                }
-            }
+        // НОВОЕ: Красивый вызов
+        showPrompt("Розбиття зони", `На скільки частин розбити групу ${ctxTarget.groupIndex}?`, "2").then((countStr) => {
             
-            const realId = clusterToGroupMap[cId];
-            const pt = pointsData.find(p => p.id === f.properties.oid);
-            if (pt) {
-                pt.groupIndex = realId;
-                if (cId !== 0) {
-                     pt.color = getDistinctColor((String(pt.assignedHub).length + realId) * 17);
-                }
-            }
-        });
+            if (!countStr) return;
+            const parts = parseInt(countStr);
 
-        redrawMap();
+            if (!parts || parts < 2) return; 
+
+            saveState(); 
+
+            const targetPoints = pointsData.filter(p => 
+                p.assignedHub === ctxTarget.hubId && p.groupIndex === ctxTarget.groupIndex
+            );
+
+            if (targetPoints.length < parts) {
+                showAlert("Помилка", "Замало точок для такого розбиття!");
+                return;
+            }
+
+            const fc = turf.featureCollection(targetPoints.map(p => turf.point([p.lng, p.lat], {oid: p.id})));
+            const clustered = turf.clustersKmeans(fc, {numberOfClusters: parts});
+
+            let maxIndex = 0;
+            pointsData.forEach(p => {
+                if (p.assignedHub === ctxTarget.hubId && p.groupIndex > maxIndex) maxIndex = p.groupIndex;
+            });
+            
+            const clusterToGroupMap = {};
+            let addedGroups = 0;
+
+            clustered.features.forEach(f => {
+                const cId = f.properties.cluster;
+                if (clusterToGroupMap[cId] === undefined) {
+                    if (cId === 0) {
+                        clusterToGroupMap[cId] = ctxTarget.groupIndex; 
+                    } else {
+                        addedGroups++;
+                        clusterToGroupMap[cId] = maxIndex + addedGroups; 
+                    }
+                }
+                
+                const realId = clusterToGroupMap[cId];
+                const pt = pointsData.find(p => p.id === f.properties.oid);
+                if (pt) {
+                    pt.groupIndex = realId;
+                    if (cId !== 0) {
+                         pt.color = getDistinctColor((String(pt.assignedHub).length + realId) * 17);
+                    }
+                }
+            });
+
+            redrawMap();
+        });
     }
 
     // --- DRAWING TOOL (LASSO) ---
@@ -899,32 +1003,45 @@
     map.on(L.Draw.Event.CREATED, function (e) {
         const layer = e.layer;
         const shape = layer.toGeoJSON();
-        const groupStr = prompt("Введіть номер групи для виділеної зони:", "99");
-        const newGroupIndex = parseInt(groupStr);
-        if (!newGroupIndex && newGroupIndex !== 0) return; 
-        saveState();
-
-        let count = 0;
-        pointsData.forEach(p => {
-            const pt = turf.point([p.lng, p.lat]);
-            if (turf.booleanPointInPolygon(pt, shape)) {
-                if (!p.assignedHub) {
-                    let nearest = null, min = Infinity;
-                    hubsData.forEach(h => {
-                        const d = turf.distance(pt, turf.point([h.lng, h.lat]));
-                        if(d < min) { min = d; nearest = h.id; }
-                    });
-                    p.assignedHub = nearest;
-                }
-                p.groupIndex = newGroupIndex;
-                p.isLocked = true; 
-                p.color = getDistinctColor((String(p.assignedHub).length + newGroupIndex) * 20);
-                count++;
+        
+        // НОВОЕ: Вызов красивого окна
+        showPrompt("Створення зони", "Введіть номер групи для цієї зони:", "99").then((groupStr) => {
+            
+            // Если нажали отмену или ничего не ввели
+            if (groupStr === null || groupStr.trim() === "") {
+                map.removeLayer(layer); // Удаляем рисунок
+                return; 
             }
-        });
 
-        alert(`Згруповано та заблоковано точок: ${count}`);
-        redrawMap();
+            const newGroupIndex = parseInt(groupStr);
+            if (!newGroupIndex && newGroupIndex !== 0) return; 
+            
+            saveState(); // Сохраняем историю для Ctrl+Z
+
+            let count = 0;
+            pointsData.forEach(p => {
+                const pt = turf.point([p.lng, p.lat]);
+                if (turf.booleanPointInPolygon(pt, shape)) {
+                    // Если у точки не было хаба - ищем ближайший
+                    if (!p.assignedHub) {
+                        let nearest = null, min = Infinity;
+                        hubsData.forEach(h => {
+                            const d = turf.distance(pt, turf.point([h.lng, h.lat]));
+                            if(d < min) { min = d; nearest = h.id; }
+                        });
+                        p.assignedHub = nearest;
+                    }
+                    p.groupIndex = newGroupIndex;
+                    p.isLocked = true; 
+                    p.color = getDistinctColor((String(p.assignedHub).length + newGroupIndex) * 20);
+                    count++;
+                }
+            });
+
+            // Вместо alert используем наше окно (без поля ввода)
+            showAlert("Готово", `Згруповано та заблоковано точок: ${count}`);
+            redrawMap();
+        });
     });
 </script>
 </body>
